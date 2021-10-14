@@ -1,11 +1,14 @@
 package net.telclic.docprocessing;
 
+import org.docx4j.XmlUtils;
 import org.docx4j.dml.wordprocessingDrawing.Inline;
+import org.docx4j.jaxb.Context;
 import org.docx4j.model.datastorage.migration.VariablePrepare;
 import org.docx4j.openpackaging.exceptions.Docx4JException;
 import org.docx4j.openpackaging.packages.WordprocessingMLPackage;
 import org.docx4j.openpackaging.parts.WordprocessingML.BinaryPartAbstractImage;
 import org.docx4j.openpackaging.parts.WordprocessingML.MainDocumentPart;
+import org.docx4j.openpackaging.parts.relationships.Namespaces;
 import org.docx4j.wml.ContentAccessor;
 import org.docx4j.wml.Drawing;
 import org.docx4j.wml.ObjectFactory;
@@ -108,6 +111,11 @@ public class DocxProcessorImpl implements DocxProcessor {
             replaceImages();
 
             MainDocumentPart documentPart = wordprocessingMLPackage.getMainDocumentPart();
+            var link = createHyperlink(documentPart, "https://google.com");
+            // Add it to a paragraph
+            org.docx4j.wml.P paragraph = Context.getWmlObjectFactory().createP();
+            paragraph.getContent().add( link );
+            documentPart.addObject(paragraph);
 
             VariablePrepare.prepare(wordprocessingMLPackage);
             documentPart.variableReplace(textVariables);
@@ -143,6 +151,37 @@ public class DocxProcessorImpl implements DocxProcessor {
                     }
                 }
             }
+        }
+    }
+
+    public P.Hyperlink createHyperlink(MainDocumentPart mdp, String url) {
+        try {
+            // We need to add a relationship to word/_rels/document.xml.rels
+            // but since its external, we don't use the
+            // usual wordMLPackage.getMainDocumentPart().addTargetPart
+            // mechanism
+            org.docx4j.relationships.ObjectFactory factory =
+                new org.docx4j.relationships.ObjectFactory();
+            org.docx4j.relationships.Relationship rel = factory.createRelationship();
+            rel.setType( Namespaces.HYPERLINK  );
+            rel.setTarget(url);
+            rel.setTargetMode("External");
+            mdp.getRelationshipsPart().addRelationship(rel);
+
+            // addRelationship sets the rel's @Id
+            String hpl = "<w:hyperlink r:id=\"" + rel.getId() + "\" xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\" " +
+                "xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\" >" +
+                "<w:r>" +
+                "<w:rPr>" +
+                "<w:rStyle w:val=\"Hyperlink\" />" +
+                "</w:rPr>" +
+                "<w:t>Link</w:t>" +
+                "</w:r>" +
+                "</w:hyperlink>";
+            return (P.Hyperlink) XmlUtils.unmarshalString(hpl);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
         }
     }
 
